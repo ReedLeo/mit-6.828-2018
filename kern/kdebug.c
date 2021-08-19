@@ -185,7 +185,7 @@ debuginfo_eip(uintptr_t addr, struct Eipdebuginfo *info)
 		// not found.
 		return -1;
 	}
-	info->eip_line = lline - lfile;
+	info->eip_line = stabs[lline].n_desc;
 
 	// Search backwards from the line number for the relevant filename
 	// stab.
