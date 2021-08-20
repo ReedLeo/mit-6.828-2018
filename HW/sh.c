@@ -16,6 +16,7 @@
 #define MAXPATHLEN 1024
 #define PATH "PATH"
 #define DELIM ":"
+#define CMD_DELIM ";"
 
 // All commands have at least a type. Have looked at the type, the code
 // typically casts the *cmd to some specific cmd type.
@@ -149,7 +150,8 @@ main(void)
 {
   static char buf[100];
   int fd, r;
-
+  char* svptr = NULL;
+  char* p_cmd = NULL;
   // Read and run input commands.
   while(getcmd(buf, sizeof(buf)) >= 0){
     if(buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' '){
@@ -160,9 +162,14 @@ main(void)
         fprintf(stderr, "cannot cd %s\n", buf+3);
       continue;
     }
-    if(fork1() == 0)
-      runcmd(parsecmd(buf));
-    wait(&r);
+    for (char* ptr = buf; ; ptr = NULL) {
+        p_cmd = strtok_r(ptr, CMD_DELIM, &svptr);
+        if (NULL == p_cmd)
+            break;
+        if(fork1() == 0)
+            runcmd(parsecmd(p_cmd));
+        wait(&r);
+    }
   }
   exit(0);
 }
