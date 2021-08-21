@@ -93,7 +93,9 @@ boot_alloc(uint32_t n)
 	// the first virtual address that the linker did *not* assign
 	// to any kernel code or global variables.
 	if (!nextfree) {
+		// end由linker插入的magic变量, 指向.bss段之后。
 		extern char end[];
+		// 按页对齐，向上取整。
 		nextfree = ROUNDUP((char *) end, PGSIZE);
 	}
 
@@ -103,7 +105,21 @@ boot_alloc(uint32_t n)
 	//
 	// LAB 2: Your code here.
 
-	return NULL;
+	// n==0, just return next free page address without allocation.
+	if (0 == n)
+		return nextfree;
+	// n != 0, must roundup to page-algined.
+	n = ROUNDUP(n, PGSIZE);
+	// page_alloc()
+	result = nextfree;
+	// Caution: all pointers in kernel are above KERNBASE.
+	// 	Use PADDR(ptr) to get the pointer's physical address
+	// 	before comparing with the other physical address related value.
+	if (PGNUM(PADDR(nextfree + n)) > npages)
+		panic("memory out of range!\n");
+	nextfree += n;
+	
+	return result;
 }
 
 // Set up a two-level page table:
@@ -125,7 +141,7 @@ mem_init(void)
 	i386_detect_memory();
 
 	// Remove this line when you're ready to test this function.
-	panic("mem_init: This function is not finished\n");
+	// panic("mem_init: This function is not finished\n");
 
 	//////////////////////////////////////////////////////////////////////
 	// create initial page directory.
@@ -148,7 +164,8 @@ mem_init(void)
 	// array.  'npages' is the number of physical pages in memory.  Use memset
 	// to initialize all fields of each struct PageInfo to 0.
 	// Your code goes here:
-
+	pages = (struct PageInfo*) boot_alloc(npages * sizeof(*pages));
+	memset(pages, 0, npages*sizeof(*pages));
 
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
@@ -251,11 +268,19 @@ page_init(void)
 	// Change the code to reflect this.
 	// NB: DO NOT actually touch the physical memory corresponding to
 	// free pages!
+	pages[0].pp_ref = 1; // 1) page 0 is in use.
 	size_t i;
-	for (i = 0; i < npages; i++) {
-		pages[i].pp_ref = 0;
-		pages[i].pp_link = page_free_list;
-		page_free_list = &pages[i];
+	for (i = 1; i < npages; i++) {	
+		// 3) pages in [IOPHYSMEM, EXTPHYSMEM) must never be allocated.
+		// 4) pages in [EXTPHYSMEM, PADDR(nextfree)) are used by kernel.
+		if (i >= PGNUM(IOPHYSMEM) && i < PGNUM(PADDR(boot_alloc(0)))) {
+			pages[i].pp_ref = 1;
+		} else {
+			// the rest pages of physical memory are free.
+			pages[i].pp_ref = 0;
+			pages[i].pp_link = page_free_list;
+			page_free_list = &pages[i];
+		}
 	}
 }
 
@@ -274,8 +299,17 @@ page_init(void)
 struct PageInfo *
 page_alloc(int alloc_flags)
 {
+	struct PageInfo* p_res = NULL;
 	// Fill this function in
-	return 0;
+	if (NULL == page_free_list)
+		return NULL;	// out of free memory.
+	p_res = page_free_list;
+	page_free_list = p_res->pp_link;
+	p_res->pp_link = NULL;
+	// p_res->pp_ref += 1; // Does NOT increment the reference count of the page
+	if (alloc_flags & ALLOC_ZERO)
+		memset(page2kva(p_res), 0, PGSIZE);
+	return p_res;
 }
 
 //
@@ -288,6 +322,10 @@ page_free(struct PageInfo *pp)
 	// Fill this function in
 	// Hint: You may want to panic if pp->pp_ref is nonzero or
 	// pp->pp_link is not NULL.
+	if (NULL == pp || pp->pp_ref != 0 || pp->pp_link != NULL)
+		panic("page_free() failed. Invalid parameter.\n");
+	pp->pp_link = page_free_list;
+	page_free_list = pp;
 }
 
 //
