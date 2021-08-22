@@ -268,13 +268,23 @@ page_init(void)
 	// Change the code to reflect this.
 	// NB: DO NOT actually touch the physical memory corresponding to
 	// free pages!
+	pte_t* p_pte = NULL;
 	pages[0].pp_ref = 1; // 1) page 0 is in use.
+	p_pte = pgdir_walk(kern_pgdir, 0, 0);
+	if (p_pte) {
+		*p_pte &= ~PTE_P;	// marked va==0 unmapped.
+	}
+
 	size_t i;
 	for (i = 1; i < npages; i++) {	
 		// 3) pages in [IOPHYSMEM, EXTPHYSMEM) must never be allocated.
 		// 4) pages in [EXTPHYSMEM, PADDR(nextfree)) are used by kernel.
 		if (i >= PGNUM(IOPHYSMEM) && i < PGNUM(PADDR(boot_alloc(0)))) {
 			pages[i].pp_ref = 1;
+			p_pte = pgdir_walk(kern_pgdir, page2kva(&pages[i]), 0);
+			if (p_pte) {
+				*p_pte &= ~PTE_P;
+			}
 		} else {
 			// the rest pages of physical memory are free.
 			pages[i].pp_ref = 0;
@@ -365,7 +375,32 @@ pte_t *
 pgdir_walk(pde_t *pgdir, const void *va, int create)
 {
 	// Fill this function in
-	return NULL;
+	pde_t* p_pde = NULL;
+	pte_t* p_pte = NULL;
+	pte_t* p_pte_base = NULL;
+	struct PageInfo* p_pgInfo = NULL;
+	if (NULL == pgdir) {
+		panic("Invalid pgdir\n");
+		return NULL;
+	}
+	
+	p_pde = &pgdir[PDX(va)];
+	// PDE->PTE-tbale doesn't exist yet.
+	if (create && (*p_pde & PTE_P) == 0) {
+		p_pgInfo = page_alloc(ALLOC_ZERO);
+		if (NULL == p_pgInfo) {
+			return NULL;
+		}
+		// page_alloc() doesn't increase the page reference.
+		// we must do it manually!!
+		++p_pgInfo->pp_ref;
+		*p_pde = page2pa(p_pgInfo) | PTE_P | PTE_W | PTE_U;
+	}
+	// PTE_ADDR(*p_pde) is a physical address, we must convert it to kernal's vm via KADDR.
+	p_pte_base = (pte_t*) KADDR(PTE_ADDR(*p_pde));
+	p_pte = &p_pte_base[PTX(va)];
+
+	return p_pte ? p_pte : NULL;
 }
 
 //
@@ -414,6 +449,27 @@ int
 page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 {
 	// Fill this function in
+	pte_t* p_pte = NULL;
+
+	if (NULL == pgdir || NULL == pp) {
+		panic("Invalid parameter(s).");
+		return -E_NO_MEM;
+	}
+	// try to increase ref first, so even if we re-inserted pp to same 'va', it's
+	// safe to page_remove() it.
+	++pp->pp_ref;
+	p_pte = pgdir_walk(pgdir, va, 0);
+	// there already have a page mapped, remove it first.
+	if (p_pte && (*p_pte & PTE_P)) {
+		page_remove(pgdir, va);
+		tlb_invalidate(pgdir, va);
+	}
+	p_pte = pgdir_walk(pgdir, va, 1);
+	if (NULL == p_pte) {
+		--pp->pp_ref;
+		return -E_NO_MEM;
+	}
+	*p_pte = PTE_ADDR(page2pa(pp)) | perm | PTE_P;
 	return 0;
 }
 
@@ -432,7 +488,17 @@ struct PageInfo *
 page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 {
 	// Fill this function in
-	return NULL;
+	pte_t* p_pte = NULL;
+	struct PageInfo* p_pginfo = NULL;
+
+	p_pte = pgdir_walk(pgdir, va, 0);
+	if (pte_store) {
+		*pte_store = p_pte;
+	}
+	if (p_pte && (*p_pte & PTE_P)) {
+		p_pginfo = pa2page(PTE_ADDR(*p_pte));
+	}
+	return p_pginfo;
 }
 
 //
@@ -454,6 +520,22 @@ void
 page_remove(pde_t *pgdir, void *va)
 {
 	// Fill this function in
+	pte_t* p_pte = NULL;
+	struct PageInfo* p_pginfo = NULL;
+
+	if (NULL == pgdir) {
+		panic("cannot remove a page from pgdir==NULL\n");
+		return;
+	}
+
+	p_pginfo = page_lookup(pgdir, va, &p_pte);
+	if (p_pte) {
+		*p_pte = 0;
+	}
+	if (p_pginfo) {
+		page_decref(p_pginfo);
+	}
+	tlb_invalidate(pgdir, va);
 }
 
 //
