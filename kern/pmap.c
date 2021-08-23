@@ -422,7 +422,7 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 	// Fill this function in
 	pte_t* p_pte = NULL;
 	for (size_t i = 0; i < size; i += PGSIZE) {
-		p_pte = pgdir_walk(pgdir, (void*)(va+i), 0);
+		p_pte = pgdir_walk(pgdir, (void*)(va+i), 1);
 		if (NULL == p_pte)
 			panic("boot_map_region() failed.\n");
 		*p_pte = PTE_ADDR(pa+i) | perm | PTE_P;
