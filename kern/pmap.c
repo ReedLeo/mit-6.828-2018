@@ -188,6 +188,12 @@ mem_init(void)
 	//      (ie. perm = PTE_U | PTE_P)
 	//    - pages itself -- kernel RW, user NONE
 	// Your code goes here:
+	size_t ro_size = UVPT - UPAGES;
+	ro_size = ro_size <= (npages * sizeof(*pages)) ? ro_size : (npages * sizeof(*pages));
+	boot_map_region(kern_pgdir, UPAGES, ro_size, PADDR(pages), PTE_U | PTE_P);
+	
+	// pages itself -- kernel RW, user NONE.
+	boot_map_region(kern_pgdir, pages, ro_size, PADDR(pages), PTE_W | PTE_P);
 
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
@@ -200,7 +206,14 @@ mem_init(void)
 	//       overwrite memory.  Known as a "guard page".
 	//     Permissions: kernel RW, user NONE
 	// Your code goes here:
+	boot_map_region(kern_pgdir, KSTACKTOP-KSTKSIZE, KSTKSIZE, PADDR(bootstacktop - KSTKSIZE), PTE_W | PTE_P);
 
+	pte_t* p_pte;
+	for (uintptr_t kv_gdstk = KSTACKTOP - PTSIZE; kv_gdstk < KSTACKTOP - KSTKSIZE; kv_gdstk += PGSIZE) {
+		p_pte = pgdir_walk(kern_pgdir, kv_gdstk, 1);
+		*p_pte = PTE_W;
+	}
+	
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE.
 	// Ie.  the VA range [KERNBASE, 2^32) should map to
