@@ -268,10 +268,12 @@ page_init(void)
 	// NB: DO NOT actually touch the physical memory corresponding to
 	// free pages!
 	pte_t* p_pte = NULL;
-	pages[0].pp_ref = 1; // 1) page 0 is in use.
+	// pages physical address above UTOP should never be alloated, so it's no need
+	// to count their reference.
+	// pages[0].pp_ref = 1; // 1) page 0 is in use.
 	p_pte = pgdir_walk(kern_pgdir, 0, 0);
 	if (p_pte) {
-		*p_pte &= ~PTE_P;	// marked va==0 unmapped.
+		*p_pte = 0;	// marked va==0 unmapped.
 	}
 
 	size_t i;
@@ -279,10 +281,10 @@ page_init(void)
 		// 3) pages in [IOPHYSMEM, EXTPHYSMEM) must never be allocated.
 		// 4) pages in [EXTPHYSMEM, PADDR(nextfree)) are used by kernel.
 		if (i >= PGNUM(IOPHYSMEM) && i < PGNUM(PADDR(boot_alloc(0)))) {
-			pages[i].pp_ref = 1;
+			// pages[i].pp_ref = 1;
 			p_pte = pgdir_walk(kern_pgdir, page2kva(&pages[i]), 0);
 			if (p_pte) {
-				*p_pte &= ~PTE_P;
+				*p_pte = 0;
 			}
 		} else {
 			// the rest pages of physical memory are free.
@@ -418,6 +420,7 @@ static void
 boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
 {
 	// Fill this function in
+
 }
 
 //
