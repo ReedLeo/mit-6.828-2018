@@ -110,7 +110,6 @@ boot_alloc(uint32_t n)
 		return nextfree;
 	// n != 0, must roundup to page-algined.
 	n = ROUNDUP(n, PGSIZE);
-	// page_alloc()
 	result = nextfree;
 	// Caution: all pointers in kernel are above KERNBASE.
 	// 	Use PADDR(ptr) to get the pointer's physical address
@@ -316,7 +315,8 @@ page_alloc(int alloc_flags)
 	p_res = page_free_list;
 	page_free_list = p_res->pp_link;
 	p_res->pp_link = NULL;
-	// p_res->pp_ref += 1; // Does NOT increment the reference count of the page
+	// Does NOT increment the reference count of the page
+	// p_res->pp_ref += 1;
 	if (alloc_flags & ALLOC_ZERO)
 		memset(page2kva(p_res), 0, PGSIZE);
 	return p_res;
@@ -391,8 +391,8 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 		if (NULL == p_pgInfo) {
 			return NULL;
 		}
-		// page_alloc() doesn't increase the page reference.
-		// we must do it manually!!
+		// !!page_alloc() doesn't increase the page reference!!
+		// !!we must do it manually!!
 		++p_pgInfo->pp_ref;
 		*p_pde = page2pa(p_pgInfo) | PTE_P | PTE_W | PTE_U;
 	}
