@@ -189,11 +189,12 @@ mem_init(void)
 	//    - pages itself -- kernel RW, user NONE
 	// Your code goes here:
 	size_t ro_size = UVPT - UPAGES;
-	ro_size = ro_size <= (npages * sizeof(*pages)) ? ro_size : (npages * sizeof(*pages));
+	size_t pgst_size = ROUNDUP((npages * sizeof(*pages)), PGSIZE);
+	ro_size = ro_size <= pgst_size ? ro_size : pgst_size;
 	boot_map_region(kern_pgdir, UPAGES, ro_size, PADDR(pages), PTE_U | PTE_P);
 	
 	// pages itself -- kernel RW, user NONE.
-	boot_map_region(kern_pgdir, pages, ro_size, PADDR(pages), PTE_W | PTE_P);
+	boot_map_region(kern_pgdir, (uintptr_t)pages, ro_size, PADDR(pages), PTE_W | PTE_P);
 
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
@@ -208,10 +209,11 @@ mem_init(void)
 	// Your code goes here:
 	boot_map_region(kern_pgdir, KSTACKTOP-KSTKSIZE, KSTKSIZE, PADDR(bootstacktop - KSTKSIZE), PTE_W | PTE_P);
 
+	// set up guard pages for kernel stack.
 	pte_t* p_pte;
 	for (uintptr_t kv_gdstk = KSTACKTOP - PTSIZE; kv_gdstk < KSTACKTOP - KSTKSIZE; kv_gdstk += PGSIZE) {
-		p_pte = pgdir_walk(kern_pgdir, kv_gdstk, 1);
-		*p_pte = PTE_W;
+		p_pte = pgdir_walk(kern_pgdir, (void*)kv_gdstk, 1);
+		*p_pte = 0;	// unaccessible.
 	}
 	
 	//////////////////////////////////////////////////////////////////////
@@ -222,6 +224,7 @@ mem_init(void)
 	// we just set up the mapping anyway.
 	// Permissions: kernel RW, user NONE
 	// Your code goes here:
+	boot_map_region(kern_pgdir, KERNBASE, -KERNBASE, 0, PTE_W | PTE_P);
 
 	// Check that the initial page directory has been set up correctly.
 	check_kern_pgdir();
@@ -401,7 +404,10 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 	
 	p_pde = &pgdir[PDX(va)];
 	// PDE->PTE-tbale doesn't exist yet.
-	if (create && (*p_pde & PTE_P) == 0) {
+	if ((*p_pde & PTE_P) == 0) {
+		if (0 == create) {
+			return NULL;
+		}
 		p_pgInfo = page_alloc(ALLOC_ZERO);
 		if (NULL == p_pgInfo) {
 			return NULL;
@@ -414,8 +420,7 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 	// PTE_ADDR(*p_pde) is a physical address, we must convert it to kernal's vm via KADDR.
 	p_pte_base = (pte_t*) KADDR(PTE_ADDR(*p_pde));
 	p_pte = &p_pte_base[PTX(va)];
-
-	return p_pte ? p_pte : NULL;
+	return p_pte;
 }
 
 //
