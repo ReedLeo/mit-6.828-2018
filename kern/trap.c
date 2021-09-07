@@ -63,9 +63,14 @@ void
 trap_init(void)
 {
 	extern struct Segdesc gdt[];
+	extern long vectors[];
 
 	// LAB 3: Your code here.
-
+	for (int i = 0; i < 256; ++i) {
+		SETGATE(idt[i], 0, GD_KT, vectors[i], 0);
+	}
+	// vector 0x30 is for system calls.
+	SETGATE(idt[0x30], 1, GD_KT, vectors[0x30], 3);
 	// Per-CPU setup 
 	trap_init_percpu();
 }
@@ -144,7 +149,15 @@ trap_dispatch(struct Trapframe *tf)
 {
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
-
+	switch(tf->tf_trapno) {
+	case T_PGFLT:
+		page_fault_handler(tf);
+		break;
+	case T_DIVIDE:
+		break;
+	default:
+		break;
+	}
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);
 	if (tf->tf_cs == GD_KT)
