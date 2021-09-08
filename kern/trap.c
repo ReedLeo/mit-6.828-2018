@@ -155,10 +155,13 @@ trap_dispatch(struct Trapframe *tf)
 	switch(tf->tf_trapno) {
 	case T_BRKPT:
 		breakpoint_handler(tf);
-		break;
+		return;
 	case T_PGFLT:
 		page_fault_handler(tf);
-		break;
+		return;
+	case T_SYSCALL:
+		syscalls_handler(tf);
+		return;
 	default:
 		break;
 	}
@@ -240,3 +243,10 @@ breakpoint_handler(struct Trapframe *tf)
 	env_destroy(curenv);
 }
 
+void
+syscalls_handler(struct Trapframe *tf)
+{
+	struct PushRegs* p_regs = &tf->tf_regs;
+	p_regs->reg_eax = syscall(p_regs->reg_eax, p_regs->reg_edx, p_regs->reg_ecx
+							, p_regs->reg_ebx, p_regs->reg_edi, p_regs->reg_esi);
+}
