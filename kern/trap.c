@@ -71,6 +71,8 @@ trap_init(void)
 	}
 	// vector 0x30 is for system calls.
 	SETGATE(idt[0x30], 1, GD_KT, vectors[0x30], 3);
+	// vector 0x03 is of breakpoint.
+	SETGATE(idt[3], 1, GD_KT, vectors[3], 3);
 	// SETGATE(idt[14], 1, GD_KT, vectors[14], 3);
 	// Per-CPU setup 
 	trap_init_percpu();
@@ -151,10 +153,11 @@ trap_dispatch(struct Trapframe *tf)
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
 	switch(tf->tf_trapno) {
+	case T_BRKPT:
+		breakpoint_handler(tf);
+		break;
 	case T_PGFLT:
 		page_fault_handler(tf);
-		break;
-	case T_DIVIDE:
 		break;
 	default:
 		break;
@@ -227,6 +230,13 @@ page_fault_handler(struct Trapframe *tf)
 	cprintf("[%08x] user fault va %08x ip %08x\n",
 		curenv->env_id, fault_va, tf->tf_eip);
 	print_trapframe(tf);
+	env_destroy(curenv);
+}
+
+void
+breakpoint_handler(struct Trapframe *tf)
+{
+	monitor(tf);
 	env_destroy(curenv);
 }
 
