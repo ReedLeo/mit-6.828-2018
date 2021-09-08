@@ -71,6 +71,7 @@ trap_init(void)
 	}
 	// vector 0x30 is for system calls.
 	SETGATE(idt[0x30], 1, GD_KT, vectors[0x30], 3);
+	// SETGATE(idt[14], 1, GD_KT, vectors[14], 3);
 	// Per-CPU setup 
 	trap_init_percpu();
 }
