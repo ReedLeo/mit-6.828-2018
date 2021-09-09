@@ -73,7 +73,8 @@ trap_init(void)
 	SETGATE(idt[0x30], 1, GD_KT, vectors[0x30], 3);
 	// vector 0x03 is of breakpoint.
 	SETGATE(idt[3], 1, GD_KT, vectors[3], 3);
-	// SETGATE(idt[14], 1, GD_KT, vectors[14], 3);
+	// vecotr 0x01 is of debug exception.
+	SETGATE(idt[1], 1, GD_KT, vectors[1], 3);
 	// Per-CPU setup 
 	trap_init_percpu();
 }
