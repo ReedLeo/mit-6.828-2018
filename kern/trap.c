@@ -70,9 +70,18 @@ void
 trap_init(void)
 {
 	extern struct Segdesc gdt[];
+	extern long vectors[];
 
 	// LAB 3: Your code here.
-
+	for (int i = 0; i < 256; ++i) {
+		SETGATE(idt[i], 0, GD_KT, vectors[i], 0);
+	}
+	// vector 0x30 is for system calls.
+	SETGATE(idt[0x30], 1, GD_KT, vectors[0x30], 3);
+	// vector 0x03 is of breakpoint.
+	SETGATE(idt[3], 1, GD_KT, vectors[3], 3);
+	// vecotr 0x01 is of debug exception.
+	SETGATE(idt[1], 1, GD_KT, vectors[1], 3);
 	// Per-CPU setup 
 	trap_init_percpu();
 }
@@ -176,6 +185,7 @@ trap_dispatch(struct Trapframe *tf)
 {
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
+<<<<<<< HEAD
 
 	// Handle spurious interrupts
 	// The hardware sometimes raises these because of noise on the
@@ -190,6 +200,21 @@ trap_dispatch(struct Trapframe *tf)
 	// interrupt using lapic_eoi() before calling the scheduler!
 	// LAB 4: Your code here.
 
+=======
+	switch(tf->tf_trapno) {
+	case T_BRKPT:
+		breakpoint_handler(tf);
+		return;
+	case T_PGFLT:
+		page_fault_handler(tf);
+		return;
+	case T_SYSCALL:
+		syscalls_handler(tf);
+		return;
+	default:
+		break;
+	}
+>>>>>>> lab3
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);
 	if (tf->tf_cs == GD_KT)
@@ -271,7 +296,10 @@ page_fault_handler(struct Trapframe *tf)
 	// Handle kernel-mode page faults.
 
 	// LAB 3: Your code here.
-
+	if ((tf->tf_cs & 3) == 0) {
+		print_trapframe(tf);
+		panic("Page fault in kernel-mode.\n");
+	}
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.
 
@@ -313,3 +341,17 @@ page_fault_handler(struct Trapframe *tf)
 	env_destroy(curenv);
 }
 
+void
+breakpoint_handler(struct Trapframe *tf)
+{
+	monitor(tf);
+	env_destroy(curenv);
+}
+
+void
+syscalls_handler(struct Trapframe *tf)
+{
+	struct PushRegs* p_regs = &tf->tf_regs;
+	p_regs->reg_eax = syscall(p_regs->reg_eax, p_regs->reg_edx, p_regs->reg_ecx
+							, p_regs->reg_ebx, p_regs->reg_edi, p_regs->reg_esi);
+}

@@ -34,6 +34,7 @@ i386_init(void)
 	env_init();
 	trap_init();
 
+<<<<<<< HEAD
 	// Lab 4 multiprocessor initialization functions
 	mp_init();
 	lapic_init();
@@ -47,6 +48,9 @@ i386_init(void)
 	// Starting non-boot CPUs
 	boot_aps();
 
+=======
+// #define TEST user_softint
+>>>>>>> lab3
 #if defined(TEST)
 	// Don't touch -- used by grading script!
 	ENV_CREATE(TEST, ENV_TYPE_USER);

@@ -11,6 +11,7 @@
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
 #include <kern/trap.h>
+#include <kern/env.h>
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
@@ -25,6 +26,8 @@ struct Command {
 static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
+	{ "backtrace", "Display backtrace traverse stack frames.", mon_backtrace},
+	{ "continue", "Continue execution in sigle-step mode for debugging.", mon_continue}
 };
 
 /***** Implementations of basic kernel monitor commands *****/
@@ -59,10 +62,39 @@ int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
 	// Your code here.
+	uint32_t ebp = read_ebp();
+	uint32_t eip;
+	uint32_t* arg = NULL;
+	struct Eipdebuginfo dbg_info = {0};
+
+	cprintf("Stack backtrace:\n");
+	while (ebp != 0) {
+		eip = *(uint32_t*)(ebp+4);
+		arg = (uint32_t*)(ebp + 8);
+		debuginfo_eip(eip, &dbg_info);
+		cprintf("  ebp %08x  eip %08x  args %08x %08x %08x %08x %08x\n"
+				, ebp, eip, arg[0], arg[1], arg[2], arg[3], arg[4]
+		);
+		cprintf("         %s:%d: %.*s+%u\n"
+				, dbg_info.eip_file, dbg_info.eip_line
+				, dbg_info.eip_fn_namelen, dbg_info.eip_fn_name
+				, eip - dbg_info.eip_fn_addr
+		);
+		ebp = *((uint32_t*)ebp);
+	}
 	return 0;
 }
 
 
+/**
+ * Lab3's challenge: single-step debug.
+*/
+int
+mon_continue(int argc, char **argv, struct Trapframe *tf)
+{
+	tf->tf_eflags |= FL_TF;
+	env_run(curenv);
+}
 
 /***** Kernel monitor command interpreter *****/
 
