@@ -301,7 +301,17 @@ mem_init_mp(void)
 	//     Permissions: kernel RW, user NONE
 	//
 	// LAB 4: Your code here:
-
+	uintptr_t kstk_va = KSTACKTOP - KSTKSIZE;
+	struct PageInfo* p_pginfo = NULL;
+	pte_t* p_pte = NULL;
+	// all cpus kstack are defined in global percpu_kstacks[][]
+	for (size_t i = 0; i < NCPU; ++i) {
+		boot_map_region(kern_pgdir, kstk_va, KSTKSIZE, PADDR(percpu_kstacks[i]), PTE_W);
+		p_pte = pgdir_walk(kern_pgdir, (char*)kstk_va - KSTKGAP, 1);
+		assert(p_pte);
+		*p_pte = 0;
+		kstk_va -= (KSTKSIZE + KSTKGAP);
+	}
 }
 
 // --------------------------------------------------------------
