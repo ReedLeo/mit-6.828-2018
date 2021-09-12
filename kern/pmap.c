@@ -353,7 +353,7 @@ page_init(void)
 	for (i = 1; i < npages; i++) {	
 		// 3) pages in [IOPHYSMEM, EXTPHYSMEM) must never be allocated.
 		// 4) pages in [EXTPHYSMEM, PADDR(nextfree)) are used by kernel.
-		if (i >= PGNUM(IOPHYSMEM) && i < PGNUM(PADDR(boot_alloc(0)))) {
+		if ( i == PGNUM(MPENTRY_PADDR) || (i >= PGNUM(IOPHYSMEM) && i < PGNUM(PADDR(boot_alloc(0)))) ) {
 			// pages[i].pp_ref = 1;
 			p_pte = pgdir_walk(kern_pgdir, page2kva(&pages[i]), 0);
 			if (p_pte) {
@@ -666,7 +666,12 @@ mmio_map_region(physaddr_t pa, size_t size)
 	// Hint: The staff solution uses boot_map_region.
 	//
 	// Your code here:
-	panic("mmio_map_region not implemented");
+	// panic("mmio_map_region not implemented");
+	void* p_res = (void*)base;
+	size = ROUNDUP(size, PGSIZE);
+	boot_map_region(kern_pgdir, base, size, pa, PTE_W | PTE_PWT | PTE_PCD);
+	base += size;
+	return p_res;
 }
 
 static uintptr_t user_mem_check_addr;
