@@ -185,7 +185,19 @@ trap_dispatch(struct Trapframe *tf)
 {
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
-<<<<<<< HEAD
+	switch(tf->tf_trapno) {
+	case T_BRKPT:
+		breakpoint_handler(tf);
+		return;
+	case T_PGFLT:
+		page_fault_handler(tf);
+		return;
+	case T_SYSCALL:
+		syscalls_handler(tf);
+		return;
+	default:
+		break;
+	}
 
 	// Handle spurious interrupts
 	// The hardware sometimes raises these because of noise on the
@@ -200,21 +212,7 @@ trap_dispatch(struct Trapframe *tf)
 	// interrupt using lapic_eoi() before calling the scheduler!
 	// LAB 4: Your code here.
 
-=======
-	switch(tf->tf_trapno) {
-	case T_BRKPT:
-		breakpoint_handler(tf);
-		return;
-	case T_PGFLT:
-		page_fault_handler(tf);
-		return;
-	case T_SYSCALL:
-		syscalls_handler(tf);
-		return;
-	default:
-		break;
-	}
->>>>>>> lab3
+
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);
 	if (tf->tf_cs == GD_KT)
