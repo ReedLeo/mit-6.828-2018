@@ -271,7 +271,7 @@ trap(struct Trapframe *tf)
 	last_tf = tf;
 
 	// Dispatch based on what type of trap occurred
-	trap_dispatch(tf);
+	trap_dispatch(tf);	// may not return.
 
 	// If we made it to this point, then no other environment was
 	// scheduled, so we should return to the current environment
@@ -287,7 +287,11 @@ void
 page_fault_handler(struct Trapframe *tf)
 {
 	uint32_t fault_va;
-
+	struct PageInfo* p_pg;
+	pde_t* p_pte;
+	char* sp;
+	struct UTrapframe* p_utf;
+	int r;
 	// Read processor's CR2 register to find the faulting address
 	fault_va = rcr2();
 
@@ -331,7 +335,35 @@ page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
 	// LAB 4: Your code here.
+	if (curenv->env_pgfault_upcall) {
+		// default: page fault from UXSTACK.
+		sp = tf->tf_esp;
+		// from user normal stack.
+		if (tf->tf_esp < USTACKTOP) {
+			p_pg = page_alloc(ALLOC_ZERO);
+			goto unhandled_pgfault;
+			r = page_insert(curenv->env_pgdir, p_pg, (char*)UXSTACKTOP - PGSIZE, PTE_W|PTE_U);
+			goto unhandled_pgfault;
+			sp = (char*)UXSTACKTOP;
+		}
 
+		// set up struct UTrapframe.
+		sp -= 4; // push a empty 32-bit word.
+		sp -= sizeof(struct UTrapframe);
+		p_utf = (void*)sp;
+		p_utf->utf_esp		= tf->tf_esp;
+		p_utf->utf_eflags	= tf->tf_eflags;
+		p_utf->utf_eip 		= tf->tf_eip;
+		p_utf->utf_regs 	= tf->tf_regs;
+		p_utf->utf_err 		= tf->tf_err;
+		p_utf->utf_fault_va = fault_va;
+
+		tf->tf_esp = sp;
+		tf->tf_eip = curenv->env_pgfault_upcall;
+
+		env_run(curenv);
+	}
+unhandled_pgfault:
 	// Destroy the environment that caused the fault.
 	cprintf("[%08x] user fault va %08x ip %08x\n",
 		curenv->env_id, fault_va, tf->tf_eip);
