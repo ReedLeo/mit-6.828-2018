@@ -180,7 +180,7 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 	struct Env* p_env = NULL;
 	struct PageInfo* p_pg = NULL;
 
-	if ((uintptr_t)va >= UTOP 
+	if ((uintptr_t)va >= UTOP || PGOFF(va)
 		|| (perm & (PTE_U | PTE_P)) != (PTE_U | PTE_P))
 		return -E_INVAL;
 
