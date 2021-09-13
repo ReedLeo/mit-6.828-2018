@@ -324,7 +324,7 @@ page_fault_handler(struct Trapframe *tf)
 	//
 	// If there's no page fault upcall, the environment didn't allocate a
 	// page for its exception stack or can't write to it, or the exception
-	// stack overflows, then destroy the environment that caused the fault.
+	// stack overflows, then destroy the environment that caused the	 fault.
 	// Note that the grade script assumes you will first check for the page
 	// fault upcall and print the "user fault va" message below if there is
 	// none.  The remaining three checks can be combined into a single test.
@@ -336,19 +336,21 @@ page_fault_handler(struct Trapframe *tf)
 
 	// LAB 4: Your code here.
 	if (curenv->env_pgfault_upcall) {
+		user_mem_assert(curenv, ROUNDDOWN(curenv->env_pgfault_upcall, PGSIZE), PGSIZE, PTE_P | PTE_U);
+		// It user handler's responsibility to allocate a page for UXSTACK.
+		user_mem_assert(curenv, (char*)UXSTACKTOP-1, 1, PTE_P | PTE_U | PTE_W);
 		// default: page fault from UXSTACK.
-		sp = tf->tf_esp;
-		// from user normal stack.
-		if (tf->tf_esp < USTACKTOP) {
-			p_pg = page_alloc(ALLOC_ZERO);
-			goto unhandled_pgfault;
-			r = page_insert(curenv->env_pgdir, p_pg, (char*)UXSTACKTOP - PGSIZE, PTE_W|PTE_U);
-			goto unhandled_pgfault;
+		sp = (char*)tf->tf_esp;
+		user_mem_assert(curenv, ROUNDDOWN(sp, PGSIZE), PGSIZE, PTE_P | PTE_U | PTE_W);
+		// from user normal stack, the user-mode has allocated 
+		// a page for UXSTACK
+		if (tf->tf_esp < USTACKTOP)
 			sp = (char*)UXSTACKTOP;
-		}
 
+		// push a empty 32-bit word for nested user exception
+		// handler's return address.
+		sp -= 4; 
 		// set up struct UTrapframe.
-		sp -= 4; // push a empty 32-bit word.
 		sp -= sizeof(struct UTrapframe);
 		p_utf = (void*)sp;
 		p_utf->utf_esp		= tf->tf_esp;
@@ -358,8 +360,8 @@ page_fault_handler(struct Trapframe *tf)
 		p_utf->utf_err 		= tf->tf_err;
 		p_utf->utf_fault_va = fault_va;
 
-		tf->tf_esp = sp;
-		tf->tf_eip = curenv->env_pgfault_upcall;
+		tf->tf_esp = (uintptr_t)sp;
+		tf->tf_eip = (uintptr_t)curenv->env_pgfault_upcall;
 
 		env_run(curenv);
 	}
