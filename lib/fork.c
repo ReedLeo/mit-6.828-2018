@@ -6,6 +6,10 @@
 // PTE_COW marks copy-on-write page table entries.
 // It is one of the bits explicitly allocated to user processes (PTE_AVAIL).
 #define PTE_COW		0x800
+#define IDX_PTE(x)	((uintptr_t)x >> PTXSHIFT)
+
+extern pde_t* uvpd;
+extern pte_t* uvpt;
 
 //
 // Custom page fault handler - if faulting page is copy-on-write,
@@ -25,6 +29,9 @@ pgfault(struct UTrapframe *utf)
 	//   (see <inc/memlayout.h>).
 
 	// LAB 4: Your code here.
+	if ((err & PTE_W) && (uvpt[IDX_PTE(addr)] & PTE_COW)) {
+		
+	}
 
 	// Allocate a new page, map it at a temporary location (PFTEMP),
 	// copy the data from the old page to the new page, then move the new
@@ -52,10 +59,28 @@ static int
 duppage(envid_t envid, unsigned pn)
 {
 	int r;
-
+	struct Env* e = NULL;
+	void* va = (void*)(pn*PGSIZE);
+	int perm = 0;
 	// LAB 4: Your code here.
-	panic("duppage not implemented");
-	return 0;
+	e = &envs[ENVX(envid)];
+	// check target envid is valid.
+	if (e->env_status == ENV_FREE || e->env_id != envid)
+		return -E_BAD_ENV;
+
+	// get all perm bits of current page table.
+	perm = PGOFF(uvpt[IDX_PTE(va)]);
+	if (perm & (PTE_COW | PTE_W))
+		perm |= PTE_COW;
+	
+	r = sys_page_map(0, va, envid, va, perm);
+	if (r < 0)
+		return r;
+
+	// self's mapping mapped PTE_COW
+	r = sys_page_map(0, va, 0, va, perm);
+
+	return r;
 }
 
 //
@@ -78,7 +103,22 @@ envid_t
 fork(void)
 {
 	// LAB 4: Your code here.
-	panic("fork not implemented");
+	envid_t eid = 0;
+	set_pgfault_handler(pgfault);
+	eid = sys_exofork();
+	if (eid < 0)
+		return eid;
+	if (eid) { // parent
+		for (size_t pn = 0; pn < PGNUM(UTOP); ++pn) {
+			if (1) {
+				duppage(eid, pn);
+			}
+		}
+	} else { // child
+		thisenv = &envs[sys_getenvid()];
+	}
+
+	return eid;
 }
 
 // Challenge!
