@@ -30,22 +30,23 @@ sched_yield(void)
 
 	// LAB 4: Your code here.
 	struct Env* stop = NULL;
+	size_t loops = NENV - 1;
 	
 	idle = curenv ? (curenv + 1) : envs;
 	stop = curenv ? curenv : (envs + NENV); 
-	for (;idle < stop; ++idle) {
+	for (;loops; ++idle, --loops) {
 		if (idle >= envs + NENV)
 			idle = envs;
 		if (idle->env_status == ENV_RUNNABLE) {
-			break;
+			env_run(idle);
 		}
 	}
 	/**
-	 * There are 2 cases that we will get there:
-	 * 	1. Find a runnable env after curenv.
-	 *  2. no env runnable, idle==curenv.
+	 * The case that we will get there:
+	 *  no env runnable, idle==curenv and is still runnable.
 	 */
-	env_run(idle);
+	if (idle == curenv && idle->env_status == ENV_RUNNABLE)
+		env_run(idle);
 	// sched_halt never returns
 	sched_halt();
 }
