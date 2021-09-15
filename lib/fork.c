@@ -8,9 +8,9 @@
 #define PTE_COW		0x800
 #define IDX_PTE(x)	((uintptr_t)x >> PTXSHIFT)
 
-extern pde_t* uvpd;
-extern pte_t* uvpt;
-
+extern volatile pde_t uvpd[];
+extern volatile pte_t uvpt[];
+extern void (*_pgfault_handler)(struct UTrapframe *utf);
 //
 // Custom page fault handler - if faulting page is copy-on-write,
 // map in our own private writable copy.
@@ -21,6 +21,10 @@ pgfault(struct UTrapframe *utf)
 	void *addr = (void *) utf->utf_fault_va;
 	uint32_t err = utf->utf_err;
 	int r;
+	pde_t pde = 0;
+	pte_t pte = 0;
+	int perm = 0;
+	void* pg_addr = NULL;
 
 	// Check that the faulting access was (1) a write, and (2) to a
 	// copy-on-write page.  If not, panic.
@@ -29,9 +33,16 @@ pgfault(struct UTrapframe *utf)
 	//   (see <inc/memlayout.h>).
 
 	// LAB 4: Your code here.
-	if ((err & PTE_W) && (uvpt[IDX_PTE(addr)] & PTE_COW)) {
-		
-	}
+	pde = uvpd[PDX(addr)];
+	// if ((pde & PTE_P) == 0)
+	// 	panic("[%x] not mapped: pde=%x\n", addr, pde);
+	
+	pte = uvpt[IDX_PTE(addr)];
+	if ((pte & PTE_P) == 0)
+		panic("[%x] not mapped: pte=%x\n", addr, pte);
+	
+	if (!(err & PTE_W) || !(pte & PTE_COW))
+		panic("[%x] is not a writable copy-on-wirte page. err=%x, perm=%x\n", addr, err, PGOFF(pte));
 
 	// Allocate a new page, map it at a temporary location (PFTEMP),
 	// copy the data from the old page to the new page, then move the new
@@ -40,8 +51,18 @@ pgfault(struct UTrapframe *utf)
 	//   You should make three system calls.
 
 	// LAB 4: Your code here.
-
-	panic("pgfault not implemented");
+	perm = PGOFF(pde) & PGOFF(pte);
+	perm &= ~PTE_COW; 
+	pg_addr = ROUNDDOWN(addr, PGSIZE);
+	if ((r = sys_page_alloc(0, PFTEMP, perm)) < 0)
+		panic("pgfault: allocate page failed (%e)\n", r);
+	if ((r = sys_page_map(0, pg_addr, 0, PFTEMP, perm)) < 0)
+		panic("pgfault: map page failed (%e)\n", r);
+	memmove(PFTEMP, ROUNDDOWN(addr, PGSIZE), PGSIZE);
+	if ((r = sys_page_map(0, PFTEMP, 0, pg_addr, perm)) < 0)
+		panic("pgfault: map PGTEMP back to %x failed (%e)\n", pg_addr, r);
+	if ((r = sys_page_unmap(0, PFTEMP)) < 0)
+		panic("pgfault: unmap PFTEMP from current address space failed. (%e)\n", r);
 }
 
 //
@@ -59,27 +80,41 @@ static int
 duppage(envid_t envid, unsigned pn)
 {
 	int r;
-	struct Env* e = NULL;
 	void* va = (void*)(pn*PGSIZE);
+	pde_t pde = 0;
+	pte_t pte = 0;
 	int perm = 0;
 	// LAB 4: Your code here.
-	e = &envs[ENVX(envid)];
-	// check target envid is valid.
-	if (e->env_status == ENV_FREE || e->env_id != envid)
-		return -E_BAD_ENV;
 
 	// get all perm bits of current page table.
+	pde = uvpd[PDX(va)];
+	perm = PGOFF(pde);
+	assert(pde & PTE_P);
+	
+	pte = uvpt[IDX_PTE(va)];
+	assert(pte & PTE_P);
+	
+	perm &= PGOFF(pte);
 	perm = PGOFF(uvpt[IDX_PTE(va)]);
 	if (perm & (PTE_COW | PTE_W))
 		perm |= PTE_COW;
 	
-	r = sys_page_map(0, va, envid, va, perm);
-	if (r < 0)
+	// allocates a fresh physical page for envid, and 
+	// map to envid's va.
+	if ((r = sys_page_alloc(envid, va, perm)) < 0)
 		return r;
-
-	// self's mapping mapped PTE_COW
-	r = sys_page_map(0, va, 0, va, perm);
-
+	// map envid's va to current address space at UTEMP
+	if ((r = sys_page_map(envid, va, 0, UTEMP, perm)) < 0)
+		return r;
+	// copying data to UTEMP is equivalent to copy to
+	// envid's va.
+	memmove(UTEMP, va, PGSIZE);
+	
+	if ((r = sys_page_unmap(0, UTEMP)) < 0)
+		return r;
+	
+	// // self's mapping mapped PTE_COW
+	// r = sys_page_map(0, va, 0, va, perm);
 	return r;
 }
 
@@ -104,20 +139,48 @@ fork(void)
 {
 	// LAB 4: Your code here.
 	envid_t eid = 0;
+	pte_t pte = 0;
+	pde_t pde = 0;
+	int perm = 0;
+	int r = 0;
+
 	set_pgfault_handler(pgfault);
 	eid = sys_exofork();
 	if (eid < 0)
 		return eid;
-	if (eid) { // parent
-		for (size_t pn = 0; pn < PGNUM(UTOP); ++pn) {
-			if (1) {
-				duppage(eid, pn);
-			}
-		}
-	} else { // child
+	if (eid == 0) { // child
 		thisenv = &envs[sys_getenvid()];
+		return 0;
 	}
 
+	// we are parent.
+	for (size_t pg = UTEXT; pg < UTOP; pg += PGSIZE) {
+		pde = uvpd[PDX(pg)];
+		if (!(pde & PTE_P))
+			continue;
+		pte = uvpt[IDX_PTE(pg)];
+		if (!(pte & PTE_P))
+			continue;
+		perm = PGOFF(pte);
+		if (perm & (PTE_W | PTE_COW))
+			duppage(eid, PGNUM(pg));
+		else {
+			if (pg == UXSTACKTOP - PGSIZE)
+				continue;
+			if ((r = sys_page_map(0, (void*)pg, eid, (void*)pg, perm)) < 0)
+				panic("fork: map shared page(%x) failed. %e\n", pg, r);
+		}
+	}
+
+	// duplicate user-stack page.
+	duppage(eid, PGNUM(ROUNDDOWN(&eid, PGSIZE)));
+	if ((r = sys_page_alloc(eid, (char*)UXSTACKTOP - PGSIZE, PTE_P | PTE_W | PTE_U)) < 0)
+		panic("fork: allocate physical page for user exception stack failed. %e\n", r);
+	
+	if ((r = sys_env_set_pgfault_upcall(eid, pgfault)) <0)
+		panic("fork: set page fault for the child[%x] failed. %e\n", eid, r);
+
+	sys_env_set_status(eid, ENV_RUNNABLE);
 	return eid;
 }
 
