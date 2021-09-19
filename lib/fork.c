@@ -188,6 +188,51 @@ fork(void)
 int
 sfork(void)
 {
-	panic("sfork not implemented");
-	return -E_INVAL;
+	envid_t eid = 0;
+	pte_t pte = 0;
+	pde_t pde = 0;
+	int perm = 0;
+	int r = 0;
+
+	set_pgfault_handler(pgfault);
+	eid = sys_exofork();
+	if (eid < 0)
+		return eid;
+	if (eid == 0) { // child
+		thisenv = &envs[sys_getenvid()];
+		return 0;
+	}
+
+	// we are parent.
+	for (size_t pg = UTEXT; pg < UTOP; pg += PGSIZE) {
+		pde = uvpd[PDX(pg)];
+		if (!(pde & PTE_P))
+			continue;
+		pte = uvpt[IDX_PTE(pg)];
+		if (!(pte & PTE_P))
+			continue;
+		perm = PGOFF(pte);
+
+		if ((pg == UXSTACKTOP - PGSIZE)
+		 ||	(pg == USTACKTOP - PGSIZE))
+			continue;
+		if ((r = sys_page_map(0, (void*)pg, eid, (void*)pg, perm)) < 0)
+			panic("fork: map shared page(%x) failed. %e\n", pg, r);
+	
+	}
+
+	// duplicate user-stack page.
+	duppage(eid, PGNUM(ROUNDDOWN(&eid, PGSIZE)));
+	
+	// allocate a fresh new physical page for user exception stack.
+	if ((r = sys_page_alloc(eid, (char*)UXSTACKTOP - PGSIZE, PTE_P | PTE_W | PTE_U)) < 0)
+		panic("fork: allocate physical page for user exception stack failed. %e\n", r);
+	
+	if ((r = sys_env_set_pgfault_upcall(eid, pgfault)) <0)
+		panic("fork: set page fault for the child[%x] failed. %e\n", eid, r);
+
+	sys_env_set_status(eid, ENV_RUNNABLE);
+	return eid;
+	// panic("sfork not implemented");
+	// return -E_INVAL;
 }
