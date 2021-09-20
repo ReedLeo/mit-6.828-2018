@@ -331,7 +331,37 @@ static int
 sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 {
 	// LAB 4: Your code here.
-	panic("sys_ipc_try_send not implemented");
+	// panic("sys_ipc_try_send not implemented");
+	struct Env* e = NULL;
+	struct PageInfo* pg = NULL;
+	pte_t* pte = NULL;
+	int r = 0;
+
+	if ((r = envid2env(envid, &e, 0)) < 0)
+		return r;
+	if (e->env_ipc_recving == 0)
+		return -E_IPC_NOT_RECV;
+	if (srcva < (void*)UTOP) {	// srcva < UTOP means sender shares a page.
+		if (PGOFF(srcva))
+			return -E_INVAL;
+		if (PERM_CHECK(perm, PTE_P | PTE_U) == 0)
+			return -E_INVAL;
+		if ( (pg = page_lookup(curenv->env_pgdir, srcva, &pte)) == NULL  
+		|| PERM_CHECK(*pte, PTE_P | PTE_U) == 0)
+			return -E_INVAL;
+		if ((perm & PTE_W) && (*pte & PTE_W) == 0)
+			return -E_INVAL;
+		
+		if ((r = page_insert(e->env_pgdir, pg, e->env_ipc_dstva, perm)) < 0)
+			return r;
+	}
+	
+	e->env_ipc_recving = 0;
+	e->env_ipc_perm = (srcva < (void*)UTOP) ? perm : 0;
+	e->env_ipc_from = curenv->env_id;
+	e->env_ipc_value = value;
+	e->env_status = ENV_RUNNABLE;
+	return 0;
 }
 
 // Block until a value is ready.  Record that you want to receive
@@ -349,7 +379,17 @@ static int
 sys_ipc_recv(void *dstva)
 {
 	// LAB 4: Your code here.
-	panic("sys_ipc_recv not implemented");
+	// panic("sys_ipc_recv not implemented");
+	if (dstva < (void*)UTOP && PGOFF(dstva) != 0)
+		return -E_INVAL;
+	
+	curenv->env_ipc_recving = 1;
+	curenv->env_ipc_dstva = (dstva < (void*)UTOP) ? dstva : (void*)UTOP;
+	curenv->env_status = ENV_NOT_RUNNABLE;
+	// set lib/sys_ipc_recv's return value=0.
+	curenv->env_tf.tf_regs.reg_eax = 0;
+	sys_yield();
+
 	return 0;
 }
 
@@ -393,6 +433,12 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		break;
 	case SYS_env_set_pgfault_upcall:
 		retval = sys_env_set_pgfault_upcall(a1, (void*)a2);
+		break;
+	case SYS_ipc_try_send:
+		retval = sys_ipc_try_send(a1, a2, (void*)a3, a4);
+		break;
+	case SYS_ipc_recv:
+		retval = sys_ipc_recv((void*)a1);
 		break;
 	default:
 		return -E_INVAL;
