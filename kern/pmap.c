@@ -679,6 +679,8 @@ mmio_map_region(physaddr_t pa, size_t size)
 	// panic("mmio_map_region not implemented");
 	void* p_res = (void*)base;
 	size = ROUNDUP(size, PGSIZE);
+	if (base + size >= MMIOLIM || base + size < base)
+		panic("mmio_map_region: invalid size overflow MMIOLIM\n");
 	boot_map_region(kern_pgdir, base, size, pa, PTE_W | PTE_PWT | PTE_PCD);
 	base += size;
 	return p_res;
