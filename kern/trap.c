@@ -83,7 +83,7 @@ trap_init(void)
 	// vecotr 0x01 is of debug exception.
 	SETGATE(idt[1], 0, GD_KT, vectors[1], 3);
 	// vector IRQ_OFFSET+IRQ0 is of clock exception
-	SETGATE(idt[IRQ_OFFSET+IRQ_TIMER], 0, GD_KT, vectors[IRQ_OFFSET+IRQ_TIMER], 3);
+	SETGATE(idt[IRQ_OFFSET+IRQ_TIMER], 0, GD_KT, vectors[IRQ_OFFSET+IRQ_TIMER], 0);
 	// Per-CPU setup 
 	trap_init_percpu();
 }
@@ -116,10 +116,10 @@ trap_init_percpu(void)
 	// user space on that CPU.
 	//
 	// LAB 4: Your code here:
-
+	size_t i = cpunum();
 	// Setup a TSS so that we get the right stack
 	// when we trap to the kernel.
-	thiscpu->cpu_ts.ts_esp0 = KSTACKTOP;
+	thiscpu->cpu_ts.ts_esp0 = KSTACKTOP - i*(KSTKSIZE + KSTKGAP);
 	thiscpu->cpu_ts.ts_ss0 = GD_KD;
 	thiscpu->cpu_ts.ts_iomb = sizeof(struct Taskstate);
 
@@ -216,6 +216,7 @@ trap_dispatch(struct Trapframe *tf)
 	if (tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER) {
 		lapic_eoi();
 		sched_yield();
+		return;
 	}
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);

@@ -149,7 +149,7 @@ fork(void)
 	if (eid < 0)
 		return eid;
 	if (eid == 0) { // child
-		thisenv = &envs[sys_getenvid()];
+		thisenv = &envs[ENVX(sys_getenvid())];
 		return 0;
 	}
 
@@ -199,7 +199,7 @@ sfork(void)
 	if (eid < 0)
 		return eid;
 	if (eid == 0) { // child
-		thisenv = &envs[sys_getenvid()];
+		thisenv = &envs[ENVX(sys_getenvid())];
 		return 0;
 	}
 

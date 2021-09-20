@@ -7,9 +7,10 @@ void
 umain(int argc, char **argv)
 {
 	envid_t env;
+	size_t i = 10000;
 
 	cprintf("I am the parent.  Forking the child...\n");
-	if ((env = fork()) == 0) {
+	if ((env = sfork()) == 0) {
 		cprintf("I am the child.  Spinning...\n");
 		while (1)
 			/* do nothing */;
@@ -24,6 +25,9 @@ umain(int argc, char **argv)
 	sys_yield();
 	sys_yield();
 	sys_yield();
+	while (--i) {
+		sys_yield();
+	}
 
 	cprintf("I am the parent.  Killing the child...\n");
 	sys_env_destroy(env);
