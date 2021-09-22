@@ -346,7 +346,6 @@ page_fault_handler(struct Trapframe *tf)
 		user_mem_assert(curenv, (char*)UXSTACKTOP-1, 1, PTE_P | PTE_U | PTE_W);
 		// default: page fault from UXSTACK.
 		sp = (char*)tf->tf_esp;
-		user_mem_assert(curenv, ROUNDDOWN(sp, PGSIZE), PGSIZE, PTE_P | PTE_U | PTE_W);
 		// from user normal stack, the user-mode has allocated 
 		// a page for UXSTACK
 		if (tf->tf_esp < USTACKTOP)
@@ -358,6 +357,8 @@ page_fault_handler(struct Trapframe *tf)
 		// set up struct UTrapframe.
 		sp -= sizeof(struct UTrapframe);
 		p_utf = (void*)sp;
+		// user stack may be a Copy-on-Write page that is read-only.
+		user_mem_assert(curenv, ROUNDDOWN(p_utf, PGSIZE), PGSIZE, PTE_P | PTE_U);
 		p_utf->utf_esp		= tf->tf_esp;
 		p_utf->utf_eflags	= tf->tf_eflags;
 		p_utf->utf_eip 		= tf->tf_eip;
@@ -365,7 +366,7 @@ page_fault_handler(struct Trapframe *tf)
 		p_utf->utf_err 		= tf->tf_err;
 		p_utf->utf_fault_va = fault_va;
 
-		tf->tf_esp = (uintptr_t)sp;
+		tf->tf_esp = (uintptr_t)p_utf;
 		tf->tf_eip = (uintptr_t)curenv->env_pgfault_upcall;
 
 		env_run(curenv);

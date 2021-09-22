@@ -10,7 +10,7 @@
 
 extern volatile pde_t uvpd[];
 extern volatile pte_t uvpt[];
-extern void (*_pgfault_handler)(struct UTrapframe *utf);
+extern void _pgfault_upcall(void);
 //
 // Custom page fault handler - if faulting page is copy-on-write,
 // map in our own private writable copy.
@@ -34,14 +34,14 @@ pgfault(struct UTrapframe *utf)
 
 	// LAB 4: Your code here.
 	pde = uvpd[PDX(addr)];
-	// if ((pde & PTE_P) == 0)
-	// 	panic("[%x] not mapped: pde=%x\n", addr, pde);
+	if ((pde & PTE_P) == 0)
+		panic("[%x] not mapped: pde=%x\n", addr, pde);
 	
 	pte = uvpt[IDX_PTE(addr)];
 	if ((pte & PTE_P) == 0)
 		panic("[%x] not mapped: pte=%x\n", addr, pte);
 	
-	if (!(err & PTE_W) || !(pte & PTE_COW))
+	if (!(err & FEC_WR) || (pte & PTE_AVAIL) != PTE_COW)
 		panic("[%x] is not a writable copy-on-wirte page. err=%x, perm=%x\n", addr, err, PGOFF(pte));
 
 	// Allocate a new page, map it at a temporary location (PFTEMP),
@@ -53,16 +53,19 @@ pgfault(struct UTrapframe *utf)
 	// LAB 4: Your code here.
 	perm = PGOFF(pde) & PGOFF(pte);
 	perm &= ~PTE_COW; 
+	perm |= PTE_W;	// private writable page.
 	pg_addr = ROUNDDOWN(addr, PGSIZE);
+
 	if ((r = sys_page_alloc(0, PFTEMP, perm)) < 0)
 		panic("pgfault: allocate page failed (%e)\n", r);
-	if ((r = sys_page_map(0, pg_addr, 0, PFTEMP, perm)) < 0)
-		panic("pgfault: map page failed (%e)\n", r);
-	memmove(PFTEMP, ROUNDDOWN(addr, PGSIZE), PGSIZE);
+
+	memmove(PFTEMP, pg_addr, PGSIZE);
+
 	if ((r = sys_page_map(0, PFTEMP, 0, pg_addr, perm)) < 0)
 		panic("pgfault: map PGTEMP back to %x failed (%e)\n", pg_addr, r);
-	if ((r = sys_page_unmap(0, PFTEMP)) < 0)
-		panic("pgfault: unmap PFTEMP from current address space failed. (%e)\n", r);
+
+	// if ((r = sys_page_unmap(0, PFTEMP)) < 0)
+	// 	panic("pgfault: unmap PFTEMP from current address space failed. (%e)\n", r);
 }
 
 //
@@ -96,25 +99,17 @@ duppage(envid_t envid, unsigned pn)
 	
 	perm &= PGOFF(pte);
 	perm = PGOFF(uvpt[IDX_PTE(va)]);
-	if (perm & (PTE_COW | PTE_W))
-		perm |= PTE_COW;
-	
-	// allocates a fresh physical page for envid, and 
-	// map to envid's va.
-	if ((r = sys_page_alloc(envid, va, perm)) < 0)
-		return r;
-	// map envid's va to current address space at UTEMP
-	if ((r = sys_page_map(envid, va, 0, UTEMP, perm)) < 0)
-		return r;
-	// copying data to UTEMP is equivalent to copy to
-	// envid's va.
-	memmove(UTEMP, va, PGSIZE);
-	
-	if ((r = sys_page_unmap(0, UTEMP)) < 0)
+	assert(perm & (PTE_COW | PTE_W));
+
+	// Copy-on-Write page is read-only.
+	perm |= PTE_COW;
+	perm &= ~PTE_W;
+
+	if ((r = sys_page_map(0, va, envid, va, perm)) < 0)
 		return r;
 	
-	// // self's mapping mapped PTE_COW
-	// r = sys_page_map(0, va, 0, va, perm);
+	// self's mapping mapped PTE_COW
+	r = sys_page_map(0, va, 0, va, perm);
 	return r;
 }
 
@@ -154,30 +149,32 @@ fork(void)
 	}
 
 	// we are parent.
-	for (size_t pg = UTEXT; pg < UTOP; pg += PGSIZE) {
+	for (size_t pg = 0; pg < UTOP; pg += PGSIZE) {
 		pde = uvpd[PDX(pg)];
 		if (!(pde & PTE_P))
 			continue;
 		pte = uvpt[IDX_PTE(pg)];
 		if (!(pte & PTE_P))
 			continue;
+		if (pg == UXSTACKTOP - PGSIZE)
+			continue;
+
 		perm = PGOFF(pte);
-		if (perm & (PTE_W | PTE_COW))
-			duppage(eid, PGNUM(pg));
+		if (perm & (PTE_W | PTE_COW)) {
+			if ((r = duppage(eid, PGNUM(pg))) < 0)
+				panic("duppage failed.(%e)\n", r);
+		}
 		else {
-			if (pg == UXSTACKTOP - PGSIZE)
-				continue;
 			if ((r = sys_page_map(0, (void*)pg, eid, (void*)pg, perm)) < 0)
 				panic("fork: map shared page(%x) failed. %e\n", pg, r);
 		}
 	}
 
-	// duplicate user-stack page.
-	duppage(eid, PGNUM(ROUNDDOWN(&eid, PGSIZE)));
-	if ((r = sys_page_alloc(eid, (char*)UXSTACKTOP - PGSIZE, PTE_P | PTE_W | PTE_U)) < 0)
+	// allocate exception stack for the child.
+	if ((r = sys_page_alloc(eid, (char*)(UXSTACKTOP - PGSIZE), PTE_P|PTE_W|PTE_U)) < 0)
 		panic("fork: allocate physical page for user exception stack failed. %e\n", r);
 	
-	if ((r = sys_env_set_pgfault_upcall(eid, pgfault)) <0)
+	if ((r = sys_env_set_pgfault_upcall(eid, _pgfault_upcall)) <0)
 		panic("fork: set page fault for the child[%x] failed. %e\n", eid, r);
 
 	sys_env_set_status(eid, ENV_RUNNABLE);
@@ -188,51 +185,6 @@ fork(void)
 int
 sfork(void)
 {
-	envid_t eid = 0;
-	pte_t pte = 0;
-	pde_t pde = 0;
-	int perm = 0;
-	int r = 0;
-
-	set_pgfault_handler(pgfault);
-	eid = sys_exofork();
-	if (eid < 0)
-		return eid;
-	if (eid == 0) { // child
-		thisenv = &envs[ENVX(sys_getenvid())];
-		return 0;
-	}
-
-	// we are parent.
-	for (size_t pg = UTEXT; pg < UTOP; pg += PGSIZE) {
-		pde = uvpd[PDX(pg)];
-		if (!(pde & PTE_P))
-			continue;
-		pte = uvpt[IDX_PTE(pg)];
-		if (!(pte & PTE_P))
-			continue;
-		perm = PGOFF(pte);
-
-		if ((pg == UXSTACKTOP - PGSIZE)
-		 ||	(pg == USTACKTOP - PGSIZE))
-			continue;
-		if ((r = sys_page_map(0, (void*)pg, eid, (void*)pg, perm)) < 0)
-			panic("fork: map shared page(%x) failed. %e\n", pg, r);
-	
-	}
-
-	// duplicate user-stack page.
-	duppage(eid, PGNUM(ROUNDDOWN(&eid, PGSIZE)));
-	
-	// allocate a fresh new physical page for user exception stack.
-	if ((r = sys_page_alloc(eid, (char*)UXSTACKTOP - PGSIZE, PTE_P | PTE_W | PTE_U)) < 0)
-		panic("fork: allocate physical page for user exception stack failed. %e\n", r);
-	
-	if ((r = sys_env_set_pgfault_upcall(eid, pgfault)) <0)
-		panic("fork: set page fault for the child[%x] failed. %e\n", eid, r);
-
-	sys_env_set_status(eid, ENV_RUNNABLE);
-	return eid;
-	// panic("sfork not implemented");
-	// return -E_INVAL;
+	panic("sfork not implemented");
+	return -E_INVAL;
 }

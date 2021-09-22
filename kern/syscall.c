@@ -191,12 +191,10 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 		|| (perm & (PTE_U | PTE_P)) != (PTE_U | PTE_P))
 		return -E_INVAL;
 
-	r = envid2env(envid, &p_env, 1);
-	if (r < 0)
+	if ((r = envid2env(envid, &p_env, 1)) < 0)
 		return r;
 	
-	p_pg = page_alloc(ALLOC_ZERO);
-	if (!p_pg)
+	if ((p_pg = page_alloc(ALLOC_ZERO)) == NULL)
 		return -E_NO_MEM;
 	
 	r = page_insert(p_env->env_pgdir, p_pg, va, perm);
