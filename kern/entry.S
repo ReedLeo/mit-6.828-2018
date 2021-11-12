@@ -65,6 +65,7 @@ entry:
 	# Now paging is enabled, but we're still running at a low EIP
 	# (why is this okay?).  Jump up above KERNBASE before entering
 	# C code.
+	# relocated 是一个标签， 编译连接后的kernel.asm中看出该标签对应地址为f010002f
 	mov	$relocated, %eax
 	jmp	*%eax
 relocated:
