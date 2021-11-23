@@ -101,9 +101,11 @@ duppage(envid_t envid, unsigned pn)
 	perm = PGOFF(uvpt[IDX_PTE(va)]);
 	assert(perm & (PTE_COW | PTE_W));
 
-	// Copy-on-Write page is read-only.
-	perm |= PTE_COW;
-	perm &= ~PTE_W;
+	if ((perm & PTE_SHARE) == 0) {
+		// Copy-on-Write page is read-only.
+		perm |= PTE_COW;
+		perm &= ~PTE_W;
+	}
 
 	if ((r = sys_page_map(0, va, envid, va, perm)) < 0)
 		return r;
