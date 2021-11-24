@@ -36,11 +36,26 @@ static void
 handle_sigsegv(int sig, siginfo_t *si, void *ctx)
 {
   // Your code here.
-
+  int r;
   // replace these three lines with your implementation
   uintptr_t fault_addr = (uintptr_t)si->si_addr;
-  printf("oops got SIGSEGV at 0x%lx\n", fault_addr);
-  exit(EXIT_FAILURE);
+//   printf("oops got SIGSEGV at 0x%lx\n", fault_addr);
+//   exit(EXIT_FAILURE);
+  double* demand_page = (void*)align_down(fault_addr, page_size);
+  if ((r = munmap(sqrts, MAX_SQRTS * sizeof(double) + AS_LIMIT)) < 0) {
+    fprintf(stderr, "in %s, unmmap: %s\n", __PRETTY_FUNCTION__, strerror(errno));
+    exit(EXIT_FAILURE);
+  }
+
+  if (mmap(demand_page, page_size, PROT_WRITE | PROT_READ,
+     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0) == NULL) {
+       fprintf(stderr, "in %s, mmap: %s\n", __PRETTY_FUNCTION__, strerror(errno));
+       exit(EXIT_FAILURE);
+  }
+
+  calculate_sqrts(demand_page, demand_page - sqrts, page_size / sizeof(double));
+
+  return;
 }
 
 static void
