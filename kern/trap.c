@@ -211,14 +211,6 @@ trap_dispatch(struct Trapframe *tf)
 		return;
 	}
 
-	// Handle clock interrupts. Don't forget to acknowledge the
-	// interrupt using lapic_eoi() before calling the scheduler!
-	// LAB 4: Your code here.
-	if (tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER) {
-		lapic_eoi();
-		sched_yield();
-		return;
-	}
 
 	// Handle keyboard and serial interrupts.
 	// LAB 5: Your code here.
@@ -232,10 +224,20 @@ trap_dispatch(struct Trapframe *tf)
 		return;
 	}
 
+	// Handle clock interrupts. Don't forget to acknowledge the
+	// interrupt using lapic_eoi() before calling the scheduler!
+	// LAB 4: Your code here.
+
 	// Add time tick increment to clock interrupts.
 	// Be careful! In multiprocessors, clock interrupts are
 	// triggered on every CPU.
 	// LAB 6: Your code here. 
+	if (tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER) {
+		lapic_eoi();
+		time_tick();
+		sched_yield();
+		return;
+	}
 
 
 	// Unexpected trap: The user process or the kernel has a bug.
