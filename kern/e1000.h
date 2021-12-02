@@ -2,12 +2,13 @@
 #define JOS_KERN_E1000_H
 #include <kern/pci.h>
 
+/* Registers */
 #define E1000_TDBAL    0x03800  /* TX Descriptor Base Address Low - RW */
 #define E1000_TDBAH    0x03804  /* TX Descriptor Base Address High - RW */
 #define E1000_TDLEN    0x03808  /* TX Descriptor Length - RW */
 #define E1000_TDH      0x03810  /* TX Descriptor Head - RW */
 #define E1000_TDT      0x03818  /* TX Descripotr Tail - RW */
-#define E1000_TXDCTL   0x03828  /* TX Descriptor Control - RW */
+#define E1000_TCTL     0x00400  /* TX Control - RW */
 #define E1000_TIPG     0x00410  /* TX Inter-packet gap -RW */
 
 /* Transmit Control */
@@ -33,6 +34,28 @@
 #define E1000_TIPG_IPGR1_SHIFT      10
 #define E1000_TIPG_IPGR2_SHIFT      20
 
+/* Transmit Descriptor bit definitions */
+#define E1000_TXD_DTYP_D     0x00100000 /* Data Descriptor */
+#define E1000_TXD_DTYP_C     0x00000000 /* Context Descriptor */
+#define E1000_TXD_POPTS_IXSM 0x01       /* Insert IP checksum */
+#define E1000_TXD_POPTS_TXSM 0x02       /* Insert TCP/UDP checksum */
+#define E1000_TXD_CMD_EOP    0x01000000 /* End of Packet */
+#define E1000_TXD_CMD_IFCS   0x02000000 /* Insert FCS (Ethernet CRC) */
+#define E1000_TXD_CMD_IC     0x04000000 /* Insert Checksum */
+#define E1000_TXD_CMD_RS     0x08000000 /* Report Status */
+#define E1000_TXD_CMD_RPS    0x10000000 /* Report Packet Sent */
+#define E1000_TXD_CMD_DEXT   0x20000000 /* Descriptor extension (0 = legacy) */
+#define E1000_TXD_CMD_VLE    0x40000000 /* Add VLAN tag */
+#define E1000_TXD_CMD_IDE    0x80000000 /* Enable Tidv register */
+#define E1000_TXD_STAT_DD    0x00000001 /* Descriptor Done */
+#define E1000_TXD_STAT_EC    0x00000002 /* Excess Collisions */
+#define E1000_TXD_STAT_LC    0x00000004 /* Late Collisions */
+#define E1000_TXD_STAT_TU    0x00000008 /* Transmit underrun */
+#define E1000_TXD_CMD_TCP    0x01000000 /* TCP packet */
+#define E1000_TXD_CMD_IP     0x02000000 /* IP packet */
+#define E1000_TXD_CMD_TSE    0x04000000 /* TCP Seg enable */
+#define E1000_TXD_STAT_TC    0x00000004 /* Tx Underrun */
+
 /* Transmit Descriptor */
 struct e1000_tx_desc {
     uint64_t buffer_addr;       /* Address of the descriptor's data buffer */
@@ -54,6 +77,8 @@ struct e1000_tx_desc {
     } upper;
 };
 
-int pci_e1000_attach(struct pci_func* pcif);
+#define E_TX_RETRY (0x7fffffff)
 
+int pci_e1000_attach(struct pci_func* pcif);
+ssize_t e1000_transmit(const char* buf, size_t size);
 #endif  // SOL >= 6
