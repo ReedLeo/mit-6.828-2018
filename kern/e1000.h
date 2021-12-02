@@ -80,5 +80,5 @@ struct e1000_tx_desc {
 #define E_TX_RETRY (0x7fffffff)
 
 int pci_e1000_attach(struct pci_func* pcif);
-ssize_t e1000_transmit(const char* buf, size_t size);
+int e1000_transmit(const char* buf, size_t size);
 #endif  // SOL >= 6
