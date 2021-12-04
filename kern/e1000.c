@@ -61,6 +61,10 @@ int e1000_transmit(const char* buf, int size)
     uint32_t tdt_idx = e1000_base_addr[E1000_TDT >> 2];
     struct e1000_tx_desc* p_next_desc = tx_descs + tdt_idx;
     
+    // pakcet is too big to transmit.
+    if (size > TX_MAX_BUF_SIZE)
+        return E_TX_PKTOF;
+
     if (tdt_idx >= TX_MAX_NDESC)
         panic("in e1000_transmit: get a wrong TDT value = %d", tdt_idx);
     
