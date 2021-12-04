@@ -91,7 +91,7 @@ void receive_init()
 
     // set RDH/RDT
     E1000_REG(E1000_RDH) = 0;
-    E1000_REG(E1000_RDT) = RX_MAX_NDESC;
+    E1000_REG(E1000_RDT) = RX_MAX_NDESC - 1;
 
     // set RCTL
     E1000_REG(E1000_RCTL) = E1000_RCTL_EN 
@@ -135,6 +135,32 @@ int e1000_transmit(const char* buf, int size)
     // update TDT
     tdt_idx = (tdt_idx + 1) % TX_MAX_NDESC;
     E1000_REG(E1000_TDT)  = tdt_idx;
+
+    return size;
+}
+
+int e1000_receive(char* buf, int size)
+{
+    uint32_t rdt = E1000_REG(E1000_RDT);
+    uint32_t nxt = (rdt+1) % RX_MAX_NDESC;
+    struct e1000_rx_desc* p_rdesc = &rx_desc[nxt];
+
+    if (rdt >= RX_MAX_NDESC)
+        panic("in e1000_receive, get a wrong RDT value=%d\n", rdt);
+
+    if ((p_rdesc->status & E1000_RXD_STAT_DD) == 0)
+        return -E_RX_RETRY;
+    
+    size = size < p_rdesc->length ? size : p_rdesc->length;
+    // p_rdesc->buffer_addr is a physical address.
+    // memmove(buf, (void*)KADDR(p_rdesc->buffer_addr), size);
+    memmove(buf, rx_bufs[nxt], size);
+
+    // clear status.
+    p_rdesc->status = 0;
+
+    // update RDT
+    E1000_REG(E1000_RDT) = nxt;
 
     return size;
 }

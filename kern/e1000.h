@@ -169,6 +169,10 @@ struct e1000_rx_desc {
 #define E_TX_RETRY  ((E_TX_ERROR) + 1)  /* transmit queue is full, retry latter. */
 #define E_TX_PKTOF  ((E_TX_ERROR) + 2)  /* packet too large (overflow). */
 
+#define E_RX_ERROR  0x20000000          /* receive error code base. */
+#define E_RX_RETRY  ((E_RX_ERROR) + 1)  /* receive queue is full, retry latter. */
+
 int pci_e1000_attach(struct pci_func* pcif);
 int e1000_transmit(const char* buf, int size);
+int e1000_receive(char* buf, int size);
 #endif  // SOL >= 6
