@@ -128,3 +128,9 @@ sys_net_try_send(void* buf, int size)
 {
 	return syscall(SYS_net_try_send, 0, (uint32_t)buf, size, 0, 0, 0);
 }
+
+int
+sys_net_try_recv(void* buf, int size)
+{
+	return syscall(SYS_net_try_recv, 0, (uint32_t)buf, size, 0, 0, 0);
+}

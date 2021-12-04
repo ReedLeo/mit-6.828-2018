@@ -440,6 +440,17 @@ sys_net_try_send(void* buf, int size)
 	return e1000_transmit(buf, size);
 }
 
+// Lab6's Ex11: try to recv a packet from e1000.
+//
+// Return received bytes, if no error. Errors is
+//	-E_RX_RETRY if no packet is received.
+static int
+sys_net_try_recv(void* buf, int size)
+{
+	user_mem_assert(curenv, buf, size, PTE_P|PTE_U|PTE_W);
+	return e1000_receive(buf, size);
+}
+
 // Dispatches to the correct kernel function, passing the arguments.
 int32_t
 syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5)
@@ -494,6 +505,9 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		retval = sys_time_msec();
 		break;
 	case SYS_net_try_send:
+		retval = sys_net_try_send((void*)a1, a2);
+		break;
+	case SYS_net_try_recv:
 		retval = sys_net_try_send((void*)a1, a2);
 		break;
 	default:
