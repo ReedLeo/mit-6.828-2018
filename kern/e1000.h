@@ -77,8 +77,10 @@ struct e1000_tx_desc {
     } upper;
 };
 
-#define E_TX_RETRY (0x7fffffff)
+#define E_TX_ERROR  0x10000000          /* transmit error code base. */
+#define E_TX_RETRY  ((E_TX_ERROR) + 1)  /* transmit queue is full, retry latter. */
+#define E_TX_PKTOF  ((E_TX_ERROR) + 2)  /* packet too large (overflow). */
 
 int pci_e1000_attach(struct pci_func* pcif);
-int e1000_transmit(const char* buf, size_t size);
+int e1000_transmit(const char* buf, int size);
 #endif  // SOL >= 6

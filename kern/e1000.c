@@ -56,7 +56,7 @@ void pci_e1000_init()
                                      | (E1000_DEFAULT_TIPG_IPGR2 << E1000_TIPG_IPGR2_SHIFT);
 }
 
-int e1000_transmit(const char* buf, size_t size)
+int e1000_transmit(const char* buf, int size)
 {
     uint32_t tdt_idx = e1000_base_addr[E1000_TDT >> 2];
     struct e1000_tx_desc* p_next_desc = tx_descs + tdt_idx;
