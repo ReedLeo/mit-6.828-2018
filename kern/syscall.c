@@ -434,9 +434,9 @@ sys_time_msec(void)
 
 // Lab6's Ex7: try to send a packet through e1000
 static int
-sys_net_try_send(void* buf, size_t size)
+sys_net_try_send(void* buf, int size)
 {
-	user_mem_assert(0, buf, size, PTE_P | PTE_U);
+	user_mem_assert(curenv, buf, size, PTE_P | PTE_U);
 	return e1000_transmit(buf, size);
 }
 
