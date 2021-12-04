@@ -73,12 +73,9 @@ int e1000_transmit(const char* buf, int size)
         return -E_TX_RETRY;
     }
     
-    size = size < sizeof(tx_bufs[tdt_idx]) ? size : sizeof(tx_bufs[tdt_idx]);
-    
-    memmove(&tx_bufs[tdt_idx], buf, size);
+    memmove(tx_bufs[tdt_idx], buf, size);
 
     // update 
-    p_next_desc->buffer_addr = (uint64_t)PADDR(&tx_descs[tdt_idx]);
     p_next_desc->lower.flags.length = (uint16_t)size;
     // set RS bit in CMD field.
     p_next_desc->lower.flags.cmd |= TXD_CMD_RS | TXD_CMD_EOP;
@@ -96,7 +93,7 @@ int pci_e1000_attach(struct pci_func* pcif)
     pci_func_enable(pcif);
     e1000_base_addr = mmio_map_region(pcif->reg_base[0], pcif->reg_size[0]);
     pci_e1000_init();
-    char buf[0x100] = {"helloworld"};
-    e1000_transmit(buf, sizeof(buf));
+    // char buf[] = {"hello"};
+    // e1000_transmit(buf, sizeof(buf));
     return 0;
 }
