@@ -29,7 +29,7 @@ uint8_t tx_bufs[TX_MAX_NDESC][TX_MAX_BUF_SIZE];
 
 // LAB 6: Your driver code here
 static
-void pci_e1000_init() 
+void transmit_init()
 {
     for (uint32_t i = 0; i < TX_MAX_NDESC; ++i) {
         tx_descs[i].buffer_addr = PADDR(tx_bufs[i]);
@@ -54,6 +54,19 @@ void pci_e1000_init()
     e1000_base_addr[E1000_TIPG >> 2] = E1000_DEFAULT_TIPG_IPGT
                                      | (E1000_DEFAULT_TIPG_IPGR1 << E1000_TIPG_IPGR1_SHIFT)
                                      | (E1000_DEFAULT_TIPG_IPGR2 << E1000_TIPG_IPGR2_SHIFT);
+}
+
+static
+void receive_init()
+{
+
+}
+
+static
+void pci_e1000_init() 
+{
+    transmit_init();
+    receive_init();
 }
 
 int e1000_transmit(const char* buf, int size)
